@@ -1,41 +1,49 @@
 /* eslint-disable prefer-rest-params */
 
-const { Promise } = require('dexie')
+import Dexie from 'dexie';
 
-module.exports = class DexieBatch {
-  constructor(opts) {
+export interface Options {
+  limit?: number;
+  batchSize: number;
+}
+
+export type Callback<T> = (item: T, index: number) => void
+
+export default class DexieBatch {
+  private readonly opts: Options;
+
+  constructor(opts: Options) {
     assertValidOptions(opts)
     this.opts = opts
   }
 
-  isParallel() {
+  isParallel(): boolean {
     return Boolean(this.opts.limit)
   }
 
-  each(collection, callback) {
+  each<T>(collection: Dexie.Collection<T, any>, callback: Callback<T>): Dexie.Promise<number> {
     assertValidMethodArgs(...arguments)
 
     return this.eachBatch(collection, (batch, batchIdx) => {
       const baseIdx = batchIdx * this.opts.batchSize
-      return Promise.all(batch.map((item, i) => callback(item, baseIdx + i)))
+      return Dexie.Promise.all(batch.map((item, i) => callback(item, baseIdx + i)))
     })
   }
 
-  eachBatch(collection, callback) {
+  eachBatch<T>(collection: Dexie.Collection<T, any>, callback: Callback<T[]>): Dexie.Promise<number> {
     assertValidMethodArgs(...arguments)
 
-    const delegate = this.isParallel() ? 'eachBatchParallel' : 'eachBatchSerial'
-    return this[delegate](collection, callback)
+    return this.isParallel() ? this.eachBatchParallel(collection, callback) : this.eachBatchSerial(collection, callback);
   }
 
-  eachBatchParallel(collection, callback) {
+  eachBatchParallel<T>(collection: Dexie.Collection<T, any>, callback: Callback<T[]>): Dexie.Promise<number> {
     assertValidMethodArgs(...arguments)
     if (!this.opts.limit) {
       throw new Error('Option "limit" must be set for parallel operation')
     }
 
     const { batchSize } = this.opts
-    const batchPromises = []
+    const batchPromises: Dexie.Promise<void>[] = []
 
     for (let batchIdx = 0; batchIdx * batchSize < this.opts.limit; batchIdx++) {
       const batchPromise = collection
@@ -47,10 +55,10 @@ module.exports = class DexieBatch {
       batchPromises.push(batchPromise)
     }
 
-    return Promise.all(batchPromises).then(batches => batches.length)
+    return Dexie.Promise.all(batchPromises).then(batches => batches.length)
   }
 
-  eachBatchSerial(collection, callback, batchIdx = 0) {
+  eachBatchSerial<T>(collection: Dexie.Collection<T, any>, callback: Callback<T[]>, batchIdx = 0): Dexie.Promise<number> {
     assertValidMethodArgs(...arguments)
 
     const { batchSize } = this.opts
@@ -68,34 +76,34 @@ module.exports = class DexieBatch {
           batchIdx + 1
         )
 
-        return Promise.all([userPromise, nextBatchesPromise]).then(
+        return Dexie.Promise.all([userPromise, nextBatchesPromise]).then(
           ([, batchCount]) => batchCount + 1
         )
       })
   }
 }
 
-function assertValidOptions(opts) {
+function assertValidOptions(opts: Options): void {
   const batchSize = opts && opts.batchSize
   if (!(batchSize && Number.isInteger(batchSize) && batchSize > 0)) {
     throw new Error('Mandatory option "batchSize" must be a positive integer')
   }
 
-  if ('limit' in opts && !(Number.isInteger(opts.limit) && opts.limit >= 0)) {
+  if ('limit' in opts && !(Number.isInteger(opts.limit!) && opts.limit! >= 0)) {
     throw new Error('Option "limit" must be a non-negative integer')
   }
 }
 
-function assertValidMethodArgs(collection, callback) {
+function assertValidMethodArgs<T>(...args: any[]): void {
   if (arguments.length < 2) {
     throw new Error('Arguments "collection" and "callback" are mandatory')
   }
 
-  if (!isCollectionInstance(collection)) {
+  if (!isCollectionInstance(args[0])) {
     throw new Error('"collection" must be of type Collection')
   }
 
-  if (!(typeof callback === 'function')) {
+  if (!(typeof args[1] === 'function')) {
     throw new TypeError('"callback" must be a function')
   }
 }
@@ -103,7 +111,7 @@ function assertValidMethodArgs(collection, callback) {
 // We would need the Dexie instance that created the collection to get the
 // Collection constructor and do some proper type checking.
 // So for now we resort to duck typing
-function isCollectionInstance(obj) {
+function isCollectionInstance(obj: any) {
   if (!obj) return false
   return ['clone', 'offset', 'limit', 'toArray'].every(
     name => typeof obj[name] === 'function'

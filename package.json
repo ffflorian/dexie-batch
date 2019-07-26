@@ -8,8 +8,8 @@
   "module": "dist/dexie-batch.mjs",
   "repository": "raphinesse/dexie-batch",
   "scripts": {
-    "prebuild": "npm test",
     "build": "npm run bundle && npm run minify",
+    "postbuild": "npm test",
     "bundle": "rollup -c",
     "postbundle": "TEST_SUBJECT=dist/dexie-batch.js ava",
     "format": "prettier --ignore-path .gitignore --write '**/*.js'",
@@ -37,11 +37,13 @@
     "ava": "^1.4.1",
     "cujs": "^0.2.1",
     "dexie": "^2.0.4",
+    "typescript": "^3.5.3",
     "fake-indexeddb": "^2.1.0",
     "nyc": "^13.3.0",
     "rollup": "^1.7.4",
     "rollup-plugin-babel": "^4.3.2",
     "rollup-plugin-commonjs": "^9.2.2",
+    "rollup-plugin-typescript": "^1.0.1",
     "rollup-plugin-node-resolve": "^4.0.1",
     "uglify-es": "^3.3.9",
     "xo": "^0.24.0"
